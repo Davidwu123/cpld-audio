@@ -47,7 +47,6 @@
 #include <jni.h>
 //#include <JNIHelp.h>
 
-//#include <log/log.h>
 #include <android/log.h>
 #define LOG_TAG "CPLD_AUDIO_JNI"
 #define LOG_NDEBUG 1
@@ -67,6 +66,7 @@ int save_audio = 0;
 #define ALOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__) // 定义LOGE类型
 #define ALOGF(...)  __android_log_print(ANDROID_LOG_FATAL,LOG_TAG,__VA_ARGS__) // 定义LOGF类型
 
+
 static void tinymix_set_value(struct mixer *mixer, const char *control,
                               char **values, unsigned int num_values)
 {
@@ -76,7 +76,7 @@ static void tinymix_set_value(struct mixer *mixer, const char *control,
     unsigned int i;
 
 
-ALOGE("tinymix_set_value111");
+    ALOGE("tinymix_set_value111");
     if (isdigit(control[0]))
         ctl = mixer_get_ctl(mixer, atoi(control));
     else
@@ -139,19 +139,36 @@ ALOGE("tinymix_set_value111");
 #define u32 unsigned int
 char remaind[32];
 int  rmaind_cnt;
-int find_channel1(u32 *RXBuff,u32 RXBuffLen)
+int find_channel0(u32 *RXBuff,u32 RXBuffLen)
 {
     u32 Channel1Pos;
     u32 *p;
     p=RXBuff;
     while(!(*p&0x100))
     {
-        if(p<RXBuff+RXBuffLen-1)
+        if(p < RXBuff + RXBuffLen - 1)
         p++;
         else return -1;
     }
-      return (p -RXBuff);
+    return (p - RXBuff);
 }
+
+int check_channel0(char RXBuff)
+{
+    if(RXBuff & 0x01) 
+    {
+        return 1;
+    } 
+    else 
+    {
+        return 0;
+    } 
+}
+
+static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1save_audio(JNIEnv *env, jclass clazz) {
+    save_audio = 1;
+}
+
 
 
 static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEnv *env, jclass clazz, jbyteArray javaAudioData,
@@ -162,11 +179,16 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
     int sendPointCnt;
     int needReadBytes;
     int ch1_pos;
-
-    if (!g_pcm || !pcm_is_ready(g_pcm))
+    if (!g_pcm)
+    {  
+       ALOGE("g_pcm is null");
+       return 0;
+    }
+    if (!pcm_is_ready(g_pcm))
     {
-        fprintf(stderr, "Unable to open PCM device (%s)\n",
-        pcm_get_error(g_pcm));
+        // fprintf(stderr, "Unable to open PCM device (%s)\n",
+        // pcm_get_error(g_pcm));
+        ALOGE("Unable to open PCM device (%s)\n", pcm_get_error(g_pcm));
         return 0;
     }
     if (!javaAudioData) {
@@ -182,8 +204,6 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
         return 0;
     }
 
-
-#if 1
 
     jbyte* recordBuff_read=recordBuff+32;
     u32 cnt_read=sizeInBytes-32;
@@ -203,17 +223,18 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
         }
     }
 
-    ch1_pos=find_channel1((u32 *)recordBuff_read,8);
+    ch1_pos=find_channel0((u32 *)recordBuff_read,8);
     if(ch1_pos<0)
     {
-        ALOGE("find_channel1 Error");
-        return 0;
+        ALOGE("find_channel0 Error head");
+        //return 0;
+        p=recordBuff_read-(rmaind_cnt)*4;
+
+        memcpy(p, remaind, rmaind_cnt*4);
+        sendPointCnt =cnt_read/4+rmaind_cnt;
     }
-
-   //ALOGE("first_ch1_pos %d", ch1_pos);
-   if((ch1_pos+rmaind_cnt) % (channels_NUM)==0)
+    else if((ch1_pos+rmaind_cnt) % (channels_NUM)==0)
     {
-
        p=recordBuff_read-(rmaind_cnt)*4;
 
        memcpy(p, remaind, rmaind_cnt*4);
@@ -229,15 +250,15 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
 
     }
 
-    ch1_pos=find_channel1((u32 *)((recordBuff_read+cnt_read-32)),8);
-    if(ch1_pos<0)
-    {
-        ALOGE("find_channel1 Error");
-        return 0;
-    }
-         //ALOGE("SEC_ch1_pos %d", ch1_pos);
 
-    if(ch1_pos) 
+    ch1_pos=find_channel0((u32 *)((recordBuff_read+cnt_read-32)),8);
+    //if(ch1_pos<0)
+    //{
+        //ALOGE("find_channel0 Error tail");
+        //return 0;
+    //}
+         //ALOGE("SEC_ch1_pos %d", ch1_pos);
+    if(ch1_pos > 0) 
     {
         rmaind_cnt =8 -ch1_pos;
         memcpy(remaind, recordBuff_read+cnt_read-(rmaind_cnt)*4 , rmaind_cnt*4);
@@ -252,26 +273,82 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
           if(channelBits&0x1)
           {
                 int i=0;
+                int destIndex=0;
+                int lastIndex=0;
                 while(i<sendPointCnt)
                 {
-                recordBuff[i*3]  = *(p+i*4+1);    
-                recordBuff[i*3+1]= *(p+i*4+2);   
-                recordBuff[i*3+2]= *(p+i*4+3); 
-                i++;
+                    int isChannel0 = check_channel0(*(p + i*4 + 1));
+                    if(destIndex % 8 == 0 && !isChannel0)
+                    {
+                        i++;
+                        continue;
+                    }
+                    else if(destIndex % 8 != 0 && isChannel0) 
+                    {
+                        //let destIndex to be last channel0 index
+                        destIndex = lastIndex;
+                        i++;
+                        continue;
+                    }
+                    else if(destIndex % 8 ==0 && isChannel0)
+                    {
+                        lastIndex = destIndex;
+                    }
+                    
+                    recordBuff[destIndex*3]  = *(p+i*4+1);    
+                    recordBuff[destIndex*3+1]= *(p+i*4+2);   
+                    recordBuff[destIndex*3+2]= *(p+i*4+3);
+                    
+                    destIndex++;
+                    i++;
+
                 }
                 (*env)->ReleaseByteArrayElements(env, javaAudioData, recordBuff, 0);
-                return (jint) sendPointCnt*3;
+                if(destIndex < 8)
+                { 
+                  rmaind_cnt = 0;
+                  return (jint) 0;
+                }
+                return (jint) destIndex*3;
 
           }else //CHANNELBITS_16
           {
               int i=0;
+              int destIndex=0;
+              int lastIndex=0;
               while(i<sendPointCnt)
               {
-                recordBuff[i*2]  =  *(p+i*4+2); 
-                recordBuff[i*2+1]= *(p+i*4+3);  
+                int isChannel0 = check_channel0(*(p + i*4 + 1));
+                if(destIndex % 8 == 0 && !isChannel0)
+                {
+                    ALOGE("missed data of %d channel ", destIndex);
+                    i++;
+                    continue;
+                }
+                else if(destIndex % 8 != 0 && isChannel0) 
+                {
+                    ALOGE("missed data of %d channel ", destIndex);
+                    //let destIndex to be last channel0 index
+                    destIndex = lastIndex;
+                    i++;
+                    continue;
+                }
+                else if(destIndex % 8 ==0 && isChannel0)
+                {
+                    lastIndex = destIndex;
+                }
+                recordBuff[destIndex*2]  =  *(p+i*4+2); 
+                recordBuff[destIndex*2+1]= *(p+i*4+3);
+
+                destIndex++;
                 i++;
               }
-                
+              if(destIndex < 8)
+              { 
+                 rmaind_cnt = 0;
+                 (*env)->ReleaseByteArrayElements(env, javaAudioData, recordBuff, 0);
+                 return (jint) 0;
+              }                
 
               if(save_audio)
               {  
@@ -283,33 +360,10 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
         
                 (*env)->ReleaseByteArrayElements(env, javaAudioData, recordBuff, 0);
                 // ALOGE("sendPointCnt*2= %d ", sendPointCnt*2);//32000
-                return (jint) sendPointCnt*2;
+                return (jint) destIndex*2;
 
           }
           
-
-
-
-    #else
-
-    if (pcm_read(g_pcm,recordBuff ,sizeInBytes ) < 0) //==0 is OK 
-    {
-    //ALOGE("Invalid operation, handler=0x%08x", g_pcm);
-    size=0;
-    }
-        // int  i =0;
-        // while(i<sizeInBytes/4)
-        //  {
-        //    recordBuff[i*3]  = *(recordBuff+i*4+1);    
-        //    recordBuff[i*3+1]= *(recordBuff+i*4+2);   
-        //    recordBuff[i*3+2]= *(recordBuff+i*4+3);  
-        //    i++;
-        //  }
-
-    (*env)->ReleaseByteArrayElements(env, javaAudioData, recordBuff, 0);
-    //ALOGE("sizeInBytes %d", sizeInBytes);//32000
-    return (jint) sizeInBytes/4*4;
-    #endif
         return 0;
 }
 
@@ -343,10 +397,12 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
 
 
     g_pcm = pcm_open(1, 0, PCM_IN, &config);
-    if (!g_pcm || !pcm_is_ready(g_pcm)) {
-        fprintf(stderr, "Unable to open PCM device (%s)\n",
-            pcm_get_error(g_pcm));
-        ALOGE("read come in open fail");
+    if (!g_pcm) {
+        ALOGE("g_pcm is null");
+        return 0;
+    }
+    if (!pcm_is_ready(g_pcm)) {
+        ALOGE("Unable to open PCM device (%s)\n", pcm_get_error(g_pcm));
         pcm_close(g_pcm);
 
         g_pcm = NULL;
@@ -368,8 +424,6 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
             ALOGE("Unable to create raw32bit.pcm file ");
     }
 
-
-
     return 0;
 }
 
@@ -387,11 +441,6 @@ static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1release(JN
         if(raw_file != NULL)
         fclose(raw_file);
     }
-}
-
-
-static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1save_audio(JNIEnv *env, jclass clazz) {
-    save_audio = 1;
 }
 
 
@@ -426,29 +475,30 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1chann
     }
     
     // //int sprintf( char *buffer, const char *format, [ argument] … );
-    i=0;
-    do{
-        sprintf( buff_value[0], "%d",channelsGainData[i]);
+    i = 0;
+    do {
+        sprintf(buff_value[0], "%d",channelsGainData[i]);
 
-        ALOGE("buff_value[0]=%s",buff_value[0]);
+        ALOGE("buff_value[0]=%s", buff_value[0]);
 
-        sprintf( buff_CH, "%d",i);
+        sprintf(buff_CH, "%d", i);
 
-        ALOGE("buff_CH=%s",buff_CH);
+        ALOGE("buff_CH=%s", buff_CH);
 
-        p=buff_value[0];
+        p = buff_value[0];
 
-        dddd[0]=p;
+        dddd[0] = p;
         
-        tinymix_set_value(mixer, buff_CH,&dddd[0], 1); 
+        tinymix_set_value(mixer, buff_CH, &dddd[0], 1); 
 
         i++;
-    }while(i<channelNum);
+    } while(i<channelNum);
 
     mixer_close(mixer);
     (*env)->ReleaseByteArrayElements(env, javaChannelsGainData, channelsGainData, 0);
     return (jint)errCode;
 }
+
 
 
 static JNINativeMethod methods[] = {
@@ -461,7 +511,7 @@ static JNINativeMethod methods[] = {
 
     {"native_set_channels_gain", "([BI)I", Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1channels_1gain },
 
-    {"native_save_audio", "()V", Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1save_audio }
+    {"native_save_audio", "()V", Java_com_aispeech_audio_CpldAudioRecorder_native_1save_audio },
 
 };
 
