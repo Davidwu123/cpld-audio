@@ -1,0 +1,3 @@
+set solib-search-path /home/yuruilong/workspace/cpld-audio/hello-jni/obj/local/x86_64
+source /home/yuruilong/ndk/android-ndk-r10e/prebuilt/common/gdb/common.setup
+directory /home/yuruilong/ndk/android-ndk-r10e/platforms/android-21/arch-x86_64/usr/include include/tinyalsa/ /home/yuruilong/workspace/cpld-audio/hello-jni/jni /home/yuruilong/ndk/android-ndk-r10e/sources/cxx-stl/system
