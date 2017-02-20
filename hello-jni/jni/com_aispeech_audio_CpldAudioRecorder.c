@@ -321,13 +321,13 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
                 int isChannel0 = check_channel0(*(p + i*4 + 1));
                 if(destIndex % 8 == 0 && !isChannel0)
                 {
-                    ALOGE("missed data of %d channel ", destIndex);
+                    ALOGE("destIndex : %d, i : %d, expected 0 channel, but not 0 channel", destIndex, i);
                     i++;
                     continue;
                 }
                 else if(destIndex % 8 != 0 && isChannel0) 
                 {
-                    ALOGE("missed data of %d channel ", destIndex);
+                    ALOGE("destIndex : %d, i : %d, expected not 0 channel, but 0 channel", destIndex, i);
                     //let destIndex to be last channel0 index
                     destIndex = lastIndex;
                     i++;
