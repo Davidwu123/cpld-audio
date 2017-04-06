@@ -59,6 +59,9 @@
 #define CPLD_REAL_CHANNELS          8
 #define CPLD_REAL_FRAME_SIZE        (sizeof(unsigned short) * CPLD_REAL_CHANNELS)
 
+#define SSIZE 256
+#define STRKEY "tlv320-pcm0-0"
+
 static unsigned char g_s24le_data[CPLD_AUDIO_PERIOD_SIZE * CPLD_AUDIO_CHANNEL_NUM * 4]; //0.125 sec data
 static unsigned int  g_s24le_data_pos = sizeof(g_s24le_data);
 static unsigned int  g_s24le_periods = 0;
@@ -67,6 +70,7 @@ static struct pcm *g_pcm = NULL;
 
 static FILE *g_s16le_pcm_file;
 static int g_save_audio = 0;
+static int cardn = 0;
 
 #define ALOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__) // 定义LOGD类型
 #define ALOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__) // 定义LOGI类型
@@ -74,6 +78,50 @@ static int g_save_audio = 0;
 #define ALOGE(...)  __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__) // 定义LOGE类型
 #define ALOGF(...)  __android_log_print(ANDROID_LOG_FATAL,LOG_TAG,__VA_ARGS__) // 定义LOGF类型
 
+static int check_card()
+{
+    char sbuf[SSIZE];
+    FILE *fp = NULL;
+    int ret = 0;
+
+    if (ret == 0 && (fp = fopen("/proc/asound/card0/pcm0c/info","r")))
+    {
+        memset(sbuf, 0, SSIZE);
+        fread(sbuf, SSIZE, 1, fp);
+        
+        if (strstr(sbuf, STRKEY))
+            ret = 1;
+        
+        fclose(fp);
+        fp = NULL;
+    }
+    
+    if (ret == 0 && (fp = fopen("/proc/asound/card1/pcm0c/info","r")))
+    {
+        memset(sbuf, 0, SSIZE);
+        fread(sbuf, SSIZE, 1, fp);
+        
+        if (strstr(sbuf, STRKEY))
+            ret = 2;
+     
+        fclose(fp);
+        fp = NULL;
+    }
+    
+    if (ret == 0 && (fp = fopen("/proc/asound/card2/pcm0c/info","r")))
+    {
+        memset(sbuf, 0, SSIZE);
+        fread(sbuf, SSIZE, 1, fp);
+        
+        if (strstr(sbuf, STRKEY))
+            ret = 3;
+        
+        fclose(fp);
+        fp = NULL;
+    }
+    
+    return ret;
+}
 
 static void tinymix_set_value(struct mixer *mixer, const char *control,
                               char **values, unsigned int num_values)
@@ -271,8 +319,15 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
     //    return (jint)-1;
     }
 
+    int n = check_card();
+    
+    if (n == 0)
+        cardn = 1;
+    else if (n > 0)
+        cardn = n - 1;
 
-    g_pcm = pcm_open(1, 0, PCM_IN, &config);
+    ALOGE("*********card:%d",cardn);
+    g_pcm = pcm_open(cardn, 0, PCM_IN, &config);
     if (!g_pcm) {
         ALOGE("g_pcm is null");
         return 0;
@@ -331,7 +386,7 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1chann
 
 
     struct mixer *mixer=NULL;
-    mixer = mixer_open(1);
+    mixer = mixer_open(cardn);
     if (!mixer) {
     fprintf(stderr, "Failed to open mixer\n");
     return EXIT_FAILURE;
