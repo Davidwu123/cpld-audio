@@ -207,7 +207,7 @@ static int cpld_s24le_pcm_read(struct pcm *pcm, char *buffer, int size)
         return -1;
     }
     frames = 0;
-    p_s16le_dst_buf = buffer;
+    p_s24le_dst_buf = buffer;
     for(dst_buf_index = 0; dst_buf_index < size / 3; dst_buf_index++) 
     {
         if(g_s24le_data_pos >= sizeof(g_s24le_data))
@@ -220,26 +220,31 @@ static int cpld_s24le_pcm_read(struct pcm *pcm, char *buffer, int size)
                 return -1;
             }
         }
-    }
-    p_s24le_value = (unsigned char *)&g_s24le_data[g_s24le_data_pos];  
-    if(*(p_s24le_value + 2) & 0x01) {
+    
+        p_s24le_value = (unsigned char *)&g_s24le_data[g_s24le_data_pos];  
+        if(*(p_s24le_value + 2) & 0x01) 
+        {
         //First channel
-        if (dst_buf_index % CPLD_REAL_CHANNELS) {
+            if (dst_buf_index % CPLD_REAL_CHANNELS) 
+            {
                 ALOGW("WARNING: s24le to s24le is not aligned, dst_buf_index=%d, frames=%d, g_s24le_periods=%u\n", dst_buf_index, frames, g_s24le_periods);
                 dst_buf_index = (dst_buf_index / CPLD_REAL_CHANNELS) * CPLD_REAL_CHANNELS;
             }
 
             frames++;
-            if (frames > (size / CPLD_REAL_FRAME_SIZE * 2)) {
+            if (frames > (size / CPLD_REAL_FRAME_SIZE * 2)) 
+            {
                 //Invalid data, assume read frames is impossible over 2 expected frames.
                 frames = 0;
                 break;
             }
+        }
+        *(p_s24le_dst_buf + dst_buf_index) = *(p_s24le_value);
+        *(p_s24le_dst_buf + dst_buf_index + 1) = *(p_s24le_value + 1);
+        *(p_s24le_dst_buf + dst_buf_index + 2) = *(p_s24le_value + 2);
+        g_s24le_data_pos = g_s24le_data_pos + 3;
     }
-    *(p_s16le_dst_buf + dst_buf_index) = *(p_s24le_value);
-    *(p_s16le_dst_buf + dst_buf_index + 1) = *(p_s24le_value + 1);
-    *(p_s16le_dst_buf + dst_buf_index + 2) = *(p_s24le_value + 2);
-    g_s24le_data_pos = g_s24le_data_pos + 3;
+
     if (frames) {
         return size;
     } else {
