@@ -398,7 +398,7 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
     {    
         if (g_s16le_pcm_file !=NULL) fclose(g_s16le_pcm_file);
 
-        g_s16le_pcm_file = fopen("/sdcard/raw16bit.pcm", "wb");
+        g_s16le_pcm_file = fopen("/sdcard/raw24bit.pcm", "wb");
         if (!g_s16le_pcm_file) ALOGE("Unable to create /sdcard/raw16bit.pcm file ");
     }
 
