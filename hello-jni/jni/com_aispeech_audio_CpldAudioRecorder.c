@@ -56,8 +56,8 @@
 #define CPLD_AUDIO_PERIOD_SIZE      8000
 #define CPLD_AUDIO_PERIOD_COUNT     8
 
-#define CPLD_REAL_CHANNELS          8
-#define CPLD_REAL_FRAME_SIZE        (sizeof(unsigned short) * CPLD_REAL_CHANNELS)
+#define CPLD_REAL_CHANNELS          6
+#define CPLD_REAL_FRAME_SIZE        (3 * CPLD_REAL_CHANNELS) //24bits--->3bytes per channel
 
 #define SSIZE 256
 #define STRKEY "tlv320-pcm0-0"
@@ -197,6 +197,57 @@ static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1save_audio
     g_save_audio = 1;
 }
 
+static int cpld_s24le_pcm_read(struct pcm *pcm, char *buffer, int size)
+{
+    unsigned char *p_s24le_value;
+    unsigned char *p_s24le_dst_buf;
+    int dst_buf_index, frames;
+    if (size % CPLD_REAL_FRAME_SIZE) {
+        ALOGE("Incorrect pcm read size (%d), should be N*%d", size, CPLD_REAL_FRAME_SIZE);
+        return -1;
+    }
+    frames = 0;
+    p_s16le_dst_buf = buffer;
+    for(dst_buf_index = 0; dst_buf_index < size / 3; dst_buf_index++) 
+    {
+        if(g_s24le_data_pos >= sizeof(g_s24le_data))
+        {
+            g_s24le_data_pos = 0;
+            if (!pcm_read(pcm, &g_s24le_data[0], sizeof(g_s24le_data))) {
+                g_s24le_periods++;
+            } else {
+                ALOGE("pcm read error, pcm handler=0x%08x", pcm);
+                return -1;
+            }
+        }
+    }
+    p_s24le_value = (unsigned char *)&g_s24le_data[g_s24le_data_pos];  
+    if(*(p_s24le_value + 2) & 0x01) {
+        //First channel
+        if (dst_buf_index % CPLD_REAL_CHANNELS) {
+                ALOGW("WARNING: s24le to s24le is not aligned, dst_buf_index=%d, frames=%d, g_s24le_periods=%u\n", dst_buf_index, frames, g_s24le_periods);
+                dst_buf_index = (dst_buf_index / CPLD_REAL_CHANNELS) * CPLD_REAL_CHANNELS;
+            }
+
+            frames++;
+            if (frames > (size / CPLD_REAL_FRAME_SIZE * 2)) {
+                //Invalid data, assume read frames is impossible over 2 expected frames.
+                frames = 0;
+                break;
+            }
+    }
+    *(p_s16le_dst_buf + dst_buf_index) = *(p_s24le_value);
+    *(p_s16le_dst_buf + dst_buf_index + 1) = *(p_s24le_value + 1);
+    *(p_s16le_dst_buf + dst_buf_index + 2) = *(p_s24le_value + 2);
+    g_s24le_data_pos = g_s24le_data_pos + 3;
+    if (frames) {
+        return size;
+    } else {
+        return -1;
+    }
+    
+}
+
 static int cpld_s16le_pcm_read(struct pcm *pcm, char *buffer, int size)
 {
     unsigned int s24le_value, *p_s24le_value;
@@ -274,7 +325,7 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
         return 0;
     }
 
-    readbytes = cpld_s16le_pcm_read(g_pcm, recordBuff, sizeInBytes);
+    readbytes = cpld_s24le_pcm_read(g_pcm, recordBuff, sizeInBytes);
     if (readbytes > 0) {
     } else {
         readbytes = 0;
