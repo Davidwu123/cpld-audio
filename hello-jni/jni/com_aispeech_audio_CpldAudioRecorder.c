@@ -390,39 +390,43 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
 //tinymix 68 0
     struct mixer *mixer=NULL;
     mixer = mixer_open(0);
-    char *buf_control = "240";
-    char *value[] ={"1"};
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+    if (mixer) {
+        char *buf_control = "240";
+        char *value[] ={"1"};
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "685";
-    value[0] = "1";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "685";
+        value[0] = "1";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "15";
-    value[0] = "0";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "15";
+        value[0] = "0";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "17";
-    value[0] = "50";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "17";
+        value[0] = "50";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "16";
-    value[0] = "0";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "16";
+        value[0] = "0";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "67";
-    value[0] = "0";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "67";
+        value[0] = "0";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "69";
-    value[0] = "50";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "69";
+        value[0] = "50";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    buf_control = "68";
-    value[0] = "0";
-    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+        buf_control = "68";
+        value[0] = "0";
+        tinymix_set_value(mixer, buf_control, &value[0], 1); 
 
-    mixer_close(mixer);
+        mixer_close(mixer);
+    } else {
+        ALOGE("Failed to open mixer\n");
+    }
 
     struct pcm_config config;
     char *buffer;
@@ -512,6 +516,7 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1chann
     struct mixer *mixer=NULL;
     mixer = mixer_open(0);
     if (!mixer) {
+        ALOGE("Failed to open mixer\n");
     fprintf(stderr, "Failed to open mixer\n");
     return EXIT_FAILURE;
     }
