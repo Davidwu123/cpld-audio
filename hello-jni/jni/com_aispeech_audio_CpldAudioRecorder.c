@@ -52,24 +52,26 @@
 #define LOG_NDEBUG 1
 #define PCM_IN     0x10000000
 #define CPLD_AUDIO_CHANNEL_NUM      2
-#define CPLD_AUDIO_RATE             64000
-#define CPLD_AUDIO_PERIOD_SIZE      8000
-#define CPLD_AUDIO_PERIOD_COUNT     8
+#define CPLD_AUDIO_RATE             48000
+#define CPLD_AUDIO_PERIOD_SIZE      1152
+#define CPLD_AUDIO_PERIOD_COUNT     2
 
 #define CPLD_REAL_CHANNELS          6
-#define CPLD_REAL_FRAME_SIZE        (3 * CPLD_REAL_CHANNELS) //24bits--->3bytes per channel
+// #define CPLD_REAL_FRAME_SIZE        (3 * CPLD_REAL_CHANNELS) //24bits--->3bytes per channel
+#define CPLD_REAL_FRAME_SIZE        (sizeof(unsigned short) * CPLD_REAL_CHANNELS) //24bits--->3bytes per channel
 
 #define SSIZE 256
 #define STRKEY "tlv320-pcm0-0"
 
-static unsigned char g_s24le_data[CPLD_AUDIO_PERIOD_SIZE * CPLD_AUDIO_CHANNEL_NUM * 4]; //0.125 sec data
+static unsigned char g_s24le_data[CPLD_AUDIO_PERIOD_SIZE * CPLD_AUDIO_CHANNEL_NUM * 4];
+// static unsigned char g_s24le_data[8 * 8000 * 4]; //0.125 sec data
 static unsigned int  g_s24le_data_pos = sizeof(g_s24le_data);
 static unsigned int  g_s24le_periods = 0;
 
 static struct pcm *g_pcm = NULL;
 
 static FILE *g_s16le_pcm_file;
-static int g_save_audio = 0;
+static int g_save_audio = 1;
 static int cardn = 0;
 
 #define ALOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__) // 定义LOGD类型
@@ -132,14 +134,15 @@ static void tinymix_set_value(struct mixer *mixer, const char *control,
     unsigned int i;
 
 
-    ALOGE("tinymix_set_value111");
-    if (isdigit(control[0]))
+    if (isdigit(control[0])) {
+        ALOGE("control : %d", atoi(control));
         ctl = mixer_get_ctl(mixer, atoi(control));
-    else
+    } else {
         ctl = mixer_get_ctl_by_name(mixer, control);
+    }
     if (!ctl) {
         fprintf(stderr, "Invalid mixer control\n");
-        ALOGE("tinymix_set_value113");
+        ALOGE("Invalid mixer control");
         return;
     }
 
@@ -150,9 +153,11 @@ static void tinymix_set_value(struct mixer *mixer, const char *control,
         if (num_values == 1) {
             /* Set all values the same */
             int value = atoi(values[0]);
+            ALOGE("value : %d", atoi(values[0]));
             for (i = 0; i < num_ctl_values; i++) {
                 if (mixer_ctl_set_value(ctl, i, value)) {
                     fprintf(stderr, "Error: invalid value\n");
+                    ALOGE("invalid value");
                     return;
                 }
             }
@@ -162,11 +167,13 @@ static void tinymix_set_value(struct mixer *mixer, const char *control,
                 fprintf(stderr,
                         "Error: %d values given, but control only takes %d\n",
                         num_values, num_ctl_values);
+                ALOGE("Error: %d values given, but control only takes %d\n", num_values, num_ctl_values);
                 return;
             }
             for (i = 0; i < num_values; i++) {
                 if (mixer_ctl_set_value(ctl, i, atoi(values[i]))) {
                     fprintf(stderr, "Error: invalid value for index %d\n", i);
+                    ALOGE("Error: invalid value for index %d\n", i);
                     return;
                 }
             }
@@ -175,12 +182,16 @@ static void tinymix_set_value(struct mixer *mixer, const char *control,
         if (type == MIXER_CTL_TYPE_ENUM) {
             if (num_values != 1) {
                 fprintf(stderr, "Enclose strings in quotes and try again\n");
+                ALOGE("Enclose strings in quotes and try again\n");
                 return;
             }
-            if (mixer_ctl_set_enum_by_string(ctl, values[0]))
+            if (mixer_ctl_set_enum_by_string(ctl, values[0])) {
                 fprintf(stderr, "Error: invalid enum value\n");
+                ALOGE("Error: invalid enum value\n");
+            }
         } else {
             fprintf(stderr, "Error: only enum types can be set with strings\n");
+            ALOGE("Error: only enum types can be set with strings\n");
         }
     }
 }
@@ -199,57 +210,64 @@ static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1save_audio
 
 static int cpld_s24le_pcm_read(struct pcm *pcm, char *buffer, int size)
 {
-    unsigned char *p_s24le_value;
-    unsigned char *p_s24le_dst_buf;
-    int dst_buf_index, frames;
-    if (size % CPLD_REAL_FRAME_SIZE) {
-        ALOGE("Incorrect pcm read size (%d), should be N*%d", size, CPLD_REAL_FRAME_SIZE);
-        return -1;
-    }
-    frames = 0;
-    p_s24le_dst_buf = buffer;
-    for(dst_buf_index = 0; dst_buf_index < size / 3; dst_buf_index++) 
+    // unsigned char *p_s24le_value;
+    // unsigned char *p_s24le_dst_buf;
+    // int dst_buf_index, frames;
+    // if (size % CPLD_REAL_FRAME_SIZE) {
+    //     ALOGE("Incorrect pcm read size (%d), should be N*%d", size, CPLD_REAL_FRAME_SIZE);
+    //     return -1;
+    // }
+    // frames = 0;
+    // p_s24le_dst_buf = buffer;
+    if(!pcm_read(pcm, buffer, size))
     {
-        if(g_s24le_data_pos >= sizeof(g_s24le_data))
-        {
-            g_s24le_data_pos = 0;
-            if (!pcm_read(pcm, &g_s24le_data[0], sizeof(g_s24le_data))) {
-                g_s24le_periods++;
-            } else {
-                ALOGE("pcm read error, pcm handler=0x%08x", pcm);
-                return -1;
-            }
-        }
-    
-        p_s24le_value = (unsigned char *)&g_s24le_data[g_s24le_data_pos];  
-        if(*(p_s24le_value + 2) & 0x01) 
-        {
-        //First channel
-            if (dst_buf_index % CPLD_REAL_CHANNELS) 
-            {
-                ALOGW("WARNING: s24le to s24le is not aligned, dst_buf_index=%d, frames=%d, g_s24le_periods=%u\n", dst_buf_index, frames, g_s24le_periods);
-                dst_buf_index = (dst_buf_index / CPLD_REAL_CHANNELS) * CPLD_REAL_CHANNELS;
-            }
-
-            frames++;
-            if (frames > (size / CPLD_REAL_FRAME_SIZE * 2)) 
-            {
-                //Invalid data, assume read frames is impossible over 2 expected frames.
-                frames = 0;
-                break;
-            }
-        }
-        *(p_s24le_dst_buf + dst_buf_index) = *(p_s24le_value);
-        *(p_s24le_dst_buf + dst_buf_index + 1) = *(p_s24le_value + 1);
-        *(p_s24le_dst_buf + dst_buf_index + 2) = *(p_s24le_value + 2);
-        g_s24le_data_pos = g_s24le_data_pos + 3;
-    }
-
-    if (frames) {
         return size;
-    } else {
-        return -1;
+    } else
+    {
+        ALOGE("PCM read error");
     }
+    // for(dst_buf_index = 0; dst_buf_index < size / 3; dst_buf_index++) 
+    // {
+    //     if(g_s24le_data_pos >= sizeof(g_s24le_data))
+    //     {
+    //         g_s24le_data_pos = 0;
+    //         if (!pcm_read(pcm, &g_s24le_data[0], sizeof(g_s24le_data))) {
+    //             g_s24le_periods++;
+    //         } else {
+    //             ALOGE("pcm read error, pcm handler=0x%08x", pcm);
+    //             return -1;
+    //         }
+    //     }
+    
+    //     p_s24le_value = (unsigned char *)&g_s24le_data[g_s24le_data_pos];  
+    //     if(*(p_s24le_value + 2) & 0x01) 
+    //     {
+    //     //First channel
+    //         if (dst_buf_index % CPLD_REAL_CHANNELS) 
+    //         {
+    //             ALOGW("WARNING: s24le to s24le is not aligned, dst_buf_index=%d, frames=%d, g_s24le_periods=%u\n", dst_buf_index, frames, g_s24le_periods);
+    //             dst_buf_index = (dst_buf_index / CPLD_REAL_CHANNELS) * CPLD_REAL_CHANNELS;
+    //         }
+
+    //         frames++;
+    //         if (frames > (size / CPLD_REAL_FRAME_SIZE * 2)) 
+    //         {
+    //             //Invalid data, assume read frames is impossible over 2 expected frames.
+    //             frames = 0;
+    //             break;
+    //         }
+    //     }
+    //     *(p_s24le_dst_buf + dst_buf_index) = *(p_s24le_value);
+    //     *(p_s24le_dst_buf + dst_buf_index + 1) = *(p_s24le_value + 1);
+    //     *(p_s24le_dst_buf + dst_buf_index + 2) = *(p_s24le_value + 2);
+    //     g_s24le_data_pos = g_s24le_data_pos + 3;
+    // }
+
+    // if (frames) {
+    //     return size;
+    // } else {
+    //     return -1;
+    // }
     
 }
 
@@ -330,7 +348,7 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
         return 0;
     }
 
-    readbytes = cpld_s24le_pcm_read(g_pcm, recordBuff, sizeInBytes);
+    readbytes = cpld_s16le_pcm_read(g_pcm, recordBuff, sizeInBytes);
     if (readbytes > 0) {
     } else {
         readbytes = 0;
@@ -355,6 +373,56 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1read(JNIEn
  */
 static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIEnv *env,jclass clazz,jint rate,jint channelNum,jint  format,jint period_size,jint period_count)
 {
+ //   tinymix 240 1
+
+//tinymix 685 1
+
+//tinymix 15 0
+
+//tinymix 17 50
+
+//tinymix 16 0
+
+//tinymix 67 0
+
+//tinymix 69 50
+
+//tinymix 68 0
+    struct mixer *mixer=NULL;
+    mixer = mixer_open(0);
+    char *buf_control = "240";
+    char *value[] ={"1"};
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "685";
+    value[0] = "1";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "15";
+    value[0] = "0";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "17";
+    value[0] = "50";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "16";
+    value[0] = "0";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "67";
+    value[0] = "0";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "69";
+    value[0] = "50";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    buf_control = "68";
+    value[0] = "0";
+    tinymix_set_value(mixer, buf_control, &value[0], 1); 
+
+    mixer_close(mixer);
 
     struct pcm_config config;
     char *buffer;
@@ -375,15 +443,15 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
     //    return (jint)-1;
     }
 
-    int n = check_card();
+    // int n = check_card();
     
-    if (n == 0)
-        cardn = 1;
-    else if (n > 0)
-        cardn = n - 1;
+    // if (n == 0)
+    //     cardn = 1;
+    // else if (n > 0)
+    //     cardn = n - 1;
 
-    ALOGE("*********card:%d",cardn);
-    g_pcm = pcm_open(cardn, 0, PCM_IN, &config);
+    // ALOGE("*********card:%d",cardn);
+    g_pcm = pcm_open(0, 6, PCM_IN, &config);
     if (!g_pcm) {
         ALOGE("g_pcm is null");
         return 0;
@@ -442,7 +510,7 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1set_1chann
 
 
     struct mixer *mixer=NULL;
-    mixer = mixer_open(cardn);
+    mixer = mixer_open(0);
     if (!mixer) {
     fprintf(stderr, "Failed to open mixer\n");
     return EXIT_FAILURE;
