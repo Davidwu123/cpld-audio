@@ -71,7 +71,7 @@ static unsigned int  g_s24le_periods = 0;
 static struct pcm *g_pcm = NULL;
 
 static FILE *g_s16le_pcm_file;
-static int g_save_audio = 1;
+static int g_save_audio = 0;
 static int cardn = 0;
 
 #define ALOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__) // 定义LOGD类型
@@ -473,7 +473,11 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
 
     if(g_save_audio)
     {    
-        if (g_s16le_pcm_file !=NULL) fclose(g_s16le_pcm_file);
+        if (g_s16le_pcm_file !=NULL) {
+            fclose(g_s16le_pcm_file);
+            g_s16le_pcm_file = NULL;
+        }
+
 
         g_s16le_pcm_file = fopen("/sdcard/raw24bit.pcm", "wb");
         if (!g_s16le_pcm_file) ALOGE("Unable to create /sdcard/raw16bit.pcm file ");
@@ -491,8 +495,11 @@ static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1release(JN
     if (g_pcm) {
         pcm_close(g_pcm);
         g_pcm = NULL;
-        if(g_s16le_pcm_file != NULL)
-        fclose(g_s16le_pcm_file);
+        if(g_s16le_pcm_file != NULL) {
+            fclose(g_s16le_pcm_file);
+            g_s16le_pcm_file = NULL;
+        }
+        
     }
 }
 
