@@ -71,7 +71,8 @@ static unsigned int  g_s24le_periods = 0;
 static struct pcm *g_pcm = NULL;
 
 static FILE *g_s16le_pcm_file;
-static int g_save_audio = 0;
+static FILE *g_s32le_pcm_file;
+static int g_save_audio = 1;
 static int cardn = 0;
 
 #define ALOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__) // 定义LOGD类型
@@ -288,6 +289,11 @@ static int cpld_s16le_pcm_read(struct pcm *pcm, char *buffer, int size)
         if (g_s24le_data_pos >= sizeof(g_s24le_data)) {
             g_s24le_data_pos = 0;
             if (!pcm_read(pcm, &g_s24le_data[0], sizeof(g_s24le_data))) {
+                if ((g_s32le_pcm_file)) {
+                    if (fwrite(&g_s24le_data[0], 1, sizeof(g_s24le_data), g_s32le_pcm_file) != sizeof(g_s24le_data)) {
+                        ALOGE("Error capturing raw_file\n");
+                    }
+                }
                 g_s24le_periods++;
             } else {
                 ALOGE("pcm read error, pcm handler=0x%08x", pcm);
@@ -479,8 +485,17 @@ static jint JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1setup(JNIE
         }
 
 
-        g_s16le_pcm_file = fopen("/sdcard/raw24bit.pcm", "wb");
+        g_s16le_pcm_file = fopen("/sdcard/raw16bit.pcm", "wb");
         if (!g_s16le_pcm_file) ALOGE("Unable to create /sdcard/raw16bit.pcm file ");
+
+        if(g_s32le_pcm_file != NULL) {
+            fclose(g_s32le_pcm_file);
+            g_s32le_pcm_file = NULL;
+        }
+
+        g_s32le_pcm_file = fopen("/sdcard/raw32bit.pcm", "wb");
+        if (!g_s32le_pcm_file) ALOGE("Unable to create /sdcard/raw32bit.pcm file ");
+
     }
 
     return 0;
@@ -498,6 +513,10 @@ static void JNICALL Java_com_aispeech_audio_CpldAudioRecorder_native_1release(JN
         if(g_s16le_pcm_file != NULL) {
             fclose(g_s16le_pcm_file);
             g_s16le_pcm_file = NULL;
+        }
+        if(g_s32le_pcm_file != NULL) {
+            fclose(g_s32le_pcm_file);
+            g_s32le_pcm_file = NULL;
         }
         
     }
